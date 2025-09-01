@@ -1,0 +1,46 @@
+
+services:
+  frontend:
+    build: 
+      dockerfile: Dockerfile
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    image: myapp/frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  backend:
+    
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    image: myapp/backend:latest
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    # i dont need db persistent cache for this project. 
+    # volumes:
+    #   - redis_data:/data
+
+volumes:
+  postgres_data:
+  # redis_data:

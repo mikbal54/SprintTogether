@@ -1,0 +1,32 @@
+services:
+  test-db:
+    image: postgres:15-alpine
+    container_name: test-db
+    environment:
+      POSTGRES_DB: test_taskman
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - test-db-data:/var/lib/postgresql/data
+    networks:
+      - test-network
+
+  test-redis:
+    image: redis:7-alpine
+    container_name: test-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - test-redis-data:/data
+    networks:
+      - test-network
+
+volumes:
+  test-db-data:
+  test-redis-data:
+
+networks:
+  test-network:
+    driver: bridge

@@ -1,0 +1,63 @@
+datasource db{
+    provider = "postgresql"
+    url= env("DATABASE_URL")
+}
+
+generator client{
+    provider = "prisma-client-js"
+}
+
+enum Status {
+	OPEN
+	IN_PROGRESS
+	COMPLETED
+}
+
+
+model User{
+    id String @id @default(uuid())
+    name String @default("")
+    auth0Id   String   @unique         // Auth0 user ID
+
+    // Used in user:request_all WebSocket handler. when a user joins the app
+   @@index([name], name: "idx_user_name")
+}
+
+model Sprint {
+    id String @id @default(uuid())
+    name String @default("")
+    description String  @default("")
+    hasChildren Boolean @default(false)
+    tasks Task[]
+    createdAt DateTime @default(now())
+    status    Status @default(OPEN)
+
+    // Used in sprintService.getAll()
+   @@index([createdAt(sort: Desc)], name: "idx_sprint_created_desc")
+}
+
+
+model Task {
+  id         String @id @default(uuid())
+  title      String
+  hours      Int
+  status    Status @default(OPEN)
+  hasChildren Boolean @default(false)
+  description String @default("")
+  parentId   String?
+  parent     Task?    @relation("TaskChildren", fields: [parentId], references: [id])
+  children   Task[]   @relation("TaskChildren")
+  sprintId   String
+  sprint     Sprint   @relation(fields: [sprintId], references: [id])
+  assignedTo String?
+
+  // Used in getAllTasksBySprintWithIndex()
+  @@index([sprintId, parentId, id], name: "idx_task_sprint_parent_pagination")
+
+   // Used in getTaskChildrenWithIndex() and also helps with recursive deletion
+  @@index([parentId, id], name: "idx_task_parent_children")
+
+  // Used in getCachedTaskCount() and getCachedChildrenCount()
+  @@index([sprintId, parentId], name: "idx_task_sprint_parent_count")
+  @@index([parentId], name: "idx_task_parent_count")
+}
