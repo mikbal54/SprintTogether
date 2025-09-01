@@ -1,5 +1,4 @@
-![Screenshot of SprintTogether application](screenshot_spring.png)
-
+![Screenshot]](./screenshot_sprint.png))
 # SprintTogether
 
 **SprintTogether** is a collaborative agile project sprint manager designed to help teams plan, track, and execute their sprints efficiently.
@@ -52,6 +51,3 @@ The server issues JWT tokens to clients with valid Auth0 authentication.
 Clients connect to the server using the JWT via HTTP cookies over WebSockets.  
 Almost all communication is handled in real-time over WebSockets.
 For all endpoints look at "Websocket DTO.html" or browse to /api/async-docs in development build.# SprintTogether
-# SprintTogether
-# SprintTogether
-# SprintTogether
