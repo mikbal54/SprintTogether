@@ -1,4 +1,4 @@
-![Screenshot]](./screenshot_sprint.png))
+![Screenshot](screenshot_sprint.png)
 # SprintTogether
 
 **SprintTogether** is a collaborative agile project sprint manager designed to help teams plan, track, and execute their sprints efficiently.
