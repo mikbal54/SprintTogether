@@ -8,7 +8,7 @@
 ## Tech Stack
 
 - **Backend:** Auth0, NestJS, PostgreSQL, Redis, Jest, Nginx
-- **Frontend:** ReactJS, MUI
+- **Frontend:** ReactJS, React Redux, MUI
 
 ---
 
@@ -51,3 +51,9 @@ The server issues JWT tokens to clients with valid Auth0 authentication.
 Clients connect to the server using the JWT via HTTP cookies over WebSockets.  
 Almost all communication is handled in real-time over WebSockets.
 For all endpoints look at "Websocket DTO.html" or browse to /api/async-docs in development build.# SprintTogether
+
+
+
+### 5. Monitoring
+
+Open http://localhost:8080 to monitor the system, only accesible from the same network.

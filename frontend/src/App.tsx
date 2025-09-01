@@ -9,7 +9,8 @@ import NotificationToast from './components/NotificationToast'
 import './App.css'
 
 function App() {
-	const wsUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+	// WebSocket connects directly to backend on port 3000
+	const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:3000'
 
 	return (
 		<>

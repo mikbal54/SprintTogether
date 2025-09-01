@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ConfigService } from './config.service';
 
 describe('AuthController', () => {
 	let controller: AuthController;
@@ -23,6 +24,12 @@ describe('AuthController', () => {
 							refresh_token: 'mock-refresh-token',
 							expires_in: 900,
 						}),
+					},
+				},
+				{
+					provide: ConfigService,
+					useValue: {
+						getFrontendUrl: jest.fn().mockReturnValue('http://localhost:5173'),
 					},
 				},
 			],

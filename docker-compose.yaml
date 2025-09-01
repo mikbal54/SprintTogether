@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
       context: ./frontend
       args:
+        VITE_WS_URL: ${VITE_API_URL}
         VITE_API_URL: ${VITE_API_URL}
     image: myapp/frontend:latest
     ports:
@@ -19,7 +20,10 @@ services:
       dockerfile: Dockerfile
     image: myapp/backend:latest
     env_file: .env
+    ports:
+      - "3000:3000"
     environment:
+    
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
     depends_on:
@@ -40,6 +44,20 @@ services:
     # i dont need db persistent cache for this project. 
     # volumes:
     #   - redis_data:/data
+
+  #dashboard #does not work in Windows. 
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "127.0.0.1:8080:8080" #only visible when accessed from localhost
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    restart: unless-stopped
 
 volumes:
   postgres_data:

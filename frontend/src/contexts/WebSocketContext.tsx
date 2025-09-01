@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface WebSocketContextType {
@@ -40,7 +40,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 }) => {
   const socketRef = useRef<Socket | null>(null);
   const eventCallbacksRef = useRef<Map<string, Set<(data: any) => void>>>(new Map());
-  const isConnectedRef = useRef(false);
+  const [isConnected, setIsConnected] = useState(false);
   const connectionStatusRef = useRef<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const isInitializedRef = useRef(false);
   const unmountingRef = useRef(false);
@@ -50,7 +50,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
       return;
     }
 
-    console.log('[WebSocket] Attempting to connect to:', url);
+
     connectionStatusRef.current = 'connecting';
     isInitializedRef.current = true;
     
@@ -71,12 +71,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
       // and also adding a general message interceptor
       const originalEmit = socket.emit.bind(socket);
       socket.emit = (event: string, ...args: any[]) => {
-        console.log('[WebSocket] Emitting message:', {
-          event,
-          data: args,
-          timestamp: new Date().toISOString(),
-          socketId: socket.id
-        });
         return originalEmit(event, ...args);
       };
 
@@ -85,26 +79,18 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
       const originalOn = socket.on.bind(socket);
       socket.on = (event: string, callback: (...args: any[]) => void) => {
         const wrappedCallback = (...args: any[]) => {
-          console.log('[WebSocket] Message received (global):', {
-            event,
-            data: args,
-            timestamp: new Date().toISOString(),
-            socketId: socket.id
-          });
           callback(...args);
         };
         return originalOn(event, wrappedCallback);
       };
 
       socket.on('connect', () => {
-        console.log('[WebSocket] Connected successfully');
-        isConnectedRef.current = true;
+        setIsConnected(true);
         connectionStatusRef.current = 'connected';
       });
 
-      socket.on('disconnect', (reason) => {
-        console.log('[WebSocket] Disconnected:', reason);
-        isConnectedRef.current = false;
+      socket.on('disconnect', () => {
+        setIsConnected(false);
         connectionStatusRef.current = 'disconnected';
       });
 
@@ -120,20 +106,18 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 
   const disconnect = () => {
     if (socketRef.current && !unmountingRef.current) {
-      console.log('[WebSocket] Disconnecting...');
       socketRef.current.disconnect();
       socketRef.current = null;
     }
     
-    isConnectedRef.current = false;
+    setIsConnected(false);
     connectionStatusRef.current = 'disconnected';
     eventCallbacksRef.current.clear();
     isInitializedRef.current = false;
   };
 
   const emit = (end_point: string, data?: any) => {
-    if (socketRef.current?.connected && isConnectedRef.current) {
-      console.log('[WebSocket] Emitting event:', end_point, 'with data:', data);
+    if (socketRef.current?.connected && isConnected) {
       socketRef.current.emit(end_point, data);
     } else {
       console.warn('[WebSocket] Socket.IO is not connected. Cannot emit event:', end_point);
@@ -142,21 +126,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 
   const on = (event: string, callback: (data: any) => void) => {
     if (socketRef.current) {
-      console.log('[WebSocket] Adding listener for event:', event);
       socketRef.current.on(event, callback);
     }
   };
 
   const off = (event: string) => {
     if (socketRef.current) {
-      console.log('[WebSocket] Removing all listeners for event:', event);
       socketRef.current.off(event);
     }
   };
 
   const sub = (event: string, callback: (data: any) => void) => {
     if (socketRef.current) {
-      console.log('[WebSocket] Subscribing to event:', event);
+      
       // Add callback to our tracking map
       if (!eventCallbacksRef.current.has(event)) {
         eventCallbacksRef.current.set(event, new Set());
@@ -164,12 +146,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
       eventCallbacksRef.current.get(event)!.add(callback);
       
       // Subscribe to the event with debugging wrapper
-      const wrappedCallback = (data: any) => {
-        console.log('[WebSocket] Event received:', event, 'with data:', data);
+            const wrappedCallback = (data: any) => {
         callback(data);
       };
-      
+
       socketRef.current.on(event, wrappedCallback);
+    } else {
+      console.warn('[WebSocket] Cannot subscribe to event:', event, '- socket not available');
     }
   };
 
@@ -214,7 +197,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
     return () => {
       // Only disconnect on actual component unmount, not on re-renders
       if (socketRef.current && !unmountingRef.current) {
-        console.log('[WebSocket] Component unmounting, disconnecting...');
         unmountingRef.current = true;
         disconnect();
       }
@@ -222,7 +204,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
   }, []); // Remove url dependency to prevent reconnection on every render
 
   const value: WebSocketContextType = {
-    isConnected: isConnectedRef.current,
+    isConnected: isConnected,
     socket: socketRef.current,
     emit,
     on,

@@ -1,63 +1,54 @@
-datasource db{
-    provider = "postgresql"
-    url= env("DATABASE_URL")
+generator client {
+  provider = "prisma-client-js"
 }
 
-generator client{
-    provider = "prisma-client-js"
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-enum Status {
-	OPEN
-	IN_PROGRESS
-	COMPLETED
-}
+model User {
+  id      String @id @default(uuid())
+  auth0Id String @unique
+  name    String @default("")
 
-
-model User{
-    id String @id @default(uuid())
-    name String @default("")
-    auth0Id   String   @unique         // Auth0 user ID
-
-    // Used in user:request_all WebSocket handler. when a user joins the app
-   @@index([name], name: "idx_user_name")
+  @@index([name], map: "idx_user_name")
 }
 
 model Sprint {
-    id String @id @default(uuid())
-    name String @default("")
-    description String  @default("")
-    hasChildren Boolean @default(false)
-    tasks Task[]
-    createdAt DateTime @default(now())
-    status    Status @default(OPEN)
+  id          String   @id @default(uuid())
+  name        String   @default("")
+  createdAt   DateTime @default(now())
+  description String   @default("")
+  status      Status   @default(OPEN)
+  hasChildren Boolean  @default(false)
+  tasks       Task[]
 
-    // Used in sprintService.getAll()
-   @@index([createdAt(sort: Desc)], name: "idx_sprint_created_desc")
+  @@index([createdAt(sort: Desc)], map: "idx_sprint_created_desc")
 }
 
-
 model Task {
-  id         String @id @default(uuid())
-  title      String
-  hours      Int
-  status    Status @default(OPEN)
+  id          String  @id @default(uuid())
+  title       String
+  hours       Int
+  parentId    String?
+  sprintId    String
+  assignedTo  String?
+  description String  @default("")
   hasChildren Boolean @default(false)
-  description String @default("")
-  parentId   String?
-  parent     Task?    @relation("TaskChildren", fields: [parentId], references: [id])
-  children   Task[]   @relation("TaskChildren")
-  sprintId   String
-  sprint     Sprint   @relation(fields: [sprintId], references: [id])
-  assignedTo String?
+  status      Status  @default(OPEN)
+  parent      Task?   @relation("TaskChildren", fields: [parentId], references: [id])
+  children    Task[]  @relation("TaskChildren")
+  sprint      Sprint  @relation(fields: [sprintId], references: [id])
 
-  // Used in getAllTasksBySprintWithIndex()
-  @@index([sprintId, parentId, id], name: "idx_task_sprint_parent_pagination")
+  @@index([sprintId, parentId, id], map: "idx_task_sprint_parent_pagination")
+  @@index([parentId, id], map: "idx_task_parent_children")
+  @@index([sprintId, parentId], map: "idx_task_sprint_parent_count")
+  @@index([parentId], map: "idx_task_parent_count")
+}
 
-   // Used in getTaskChildrenWithIndex() and also helps with recursive deletion
-  @@index([parentId, id], name: "idx_task_parent_children")
-
-  // Used in getCachedTaskCount() and getCachedChildrenCount()
-  @@index([sprintId, parentId], name: "idx_task_sprint_parent_count")
-  @@index([parentId], name: "idx_task_parent_count")
+enum Status {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
 }

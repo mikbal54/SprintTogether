@@ -18,6 +18,7 @@ import { RedisService } from './redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OnEvent } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from './config.service';
 import { 
   OnlineUserDto, 
   OnlineUsersResponseDto, 
@@ -41,7 +42,35 @@ import {
 
 @WebSocketGateway({
   cors: {
-    origin: 'http://localhost:5173',
+    origin: (() => {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const url = new URL(frontendUrl);
+      const origins = [frontendUrl];
+      
+      // For HTTP/HTTPS, handle port variations
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        const defaultPort = url.protocol === 'http:' ? '80' : '443';
+        
+        // If URL has explicit port 80/443, also add version without port
+        if (url.port === defaultPort) {
+          const urlWithoutPort = `${url.protocol}//${url.hostname}`;
+          origins.push(urlWithoutPort);
+        }
+        // If URL has no port (implicit default), also add version with explicit port
+        else if (!url.port) {
+          const urlWithPort = `${url.protocol}//${url.hostname}:${defaultPort}`;
+          origins.push(urlWithPort);
+        }
+        // If URL has non-default port, also add version without port
+        else {
+          const urlWithoutPort = `${url.protocol}//${url.hostname}`;
+          origins.push(urlWithoutPort);
+        }
+      }
+      
+      // Remove duplicates and return
+      return [...new Set(origins)];
+    })(),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -491,16 +520,35 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnMo
 
   private async findUser(auth0Id: string): Promise<any> {
     try {
-      // Find existing user - they must exist since they have a valid JWT
-      const user = await this.prismaService.user.findUnique({
+      // Find existing user
+      let user = await this.prismaService.user.findUnique({
         where: { auth0Id }
       });
 
       if (!user) {
-        throw new UnauthorizedException(`User with auth0Id ${auth0Id} not found in database. This indicates a program error - user should exist after successful authentication.`);
+        // User is authenticated via Auth0 but doesn't exist in our database
+        // Create a new user record
+        console.log(`Creating new user for auth0Id: ${auth0Id}`);
+        
+        // Generate a fallback name
+        const userName = `User${Date.now()}`;
+        
+        try {
+          user = await this.prismaService.user.create({
+            data: {
+              auth0Id: auth0Id,
+              name: userName
+            }
+          });
+          console.log(`Created new user: ${user.name} (${user.id})`);
+        } catch (createError) {
+          console.error('Failed to create user:', createError);
+          throw new UnauthorizedException(`Failed to create user for auth0Id ${auth0Id}: ${createError.message}`);
+        }
+      } else {
+        console.log(`Found existing user: ${user.name} (${user.id})`);
       }
 
-      console.log(`Found existing user: ${user.name} (${user.id})`);
       return user;
     } catch (error) {
       console.error('Error finding user:', error);

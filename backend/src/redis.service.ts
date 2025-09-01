@@ -88,14 +88,25 @@ export class RedisService implements OnModuleInit {
   // Get keys by pattern (for debugging)
   async getKeysByPattern(pattern: string): Promise<string[]> {
     try {
+      if (!this.client) {
+        console.warn('Redis client not available for getKeysByPattern');
+        return [];
+      }
+      
       let cursor = '0';
       const keys: string[] = [];
       
       do {
         const result = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', '100');
+        if (!result || !Array.isArray(result) || result.length < 2) {
+          console.warn('Invalid scan result:', result);
+          break;
+        }
         cursor = result[0];
         const foundKeys = result[1];
-        keys.push(...foundKeys);
+        if (Array.isArray(foundKeys)) {
+          keys.push(...foundKeys);
+        }
       } while (cursor !== '0');
       
       return keys;

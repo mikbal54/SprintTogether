@@ -120,7 +120,7 @@ export function JwtRefreshProvider({ children }: { children: React.ReactNode }) 
         // Redirect to login or handle as needed
         // The session provider will handle the unauthenticated state
       } else {
-        console.log('[JwtRefreshContext] Refresh failed with error, will retry on next interval')
+
         if (showNotificationsRef.current) {
           dispatch(addNotification({
             type: 'error',
@@ -257,21 +257,11 @@ export function JwtRefreshProvider({ children }: { children: React.ReactNode }) 
     if (!isActiveRef.current) return
     
     try {
-      console.log('[JwtRefreshContext] Initializing refresh cycle')
       
       // Try to refresh immediately to get the current token expiry
       const response = await api.post('/auth/refresh')
       
-      console.log('[JwtRefreshContext] Initial refresh response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        data: response.data,
-        dataType: typeof response.data,
-        hasExpiresIn: response.data?.expires_in !== undefined,
-        expiresInValue: response.data?.expires_in,
-        expiresInType: typeof response.data?.expires_in
-      })
+
       
       if ((response.status === 200 || response.status === 201) && response.data?.expires_in) {
         const expiresIn = response.data.expires_in

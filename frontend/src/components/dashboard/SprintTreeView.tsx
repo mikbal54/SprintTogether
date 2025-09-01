@@ -40,13 +40,16 @@ import {
 	updateSprintTasks,
 	updateSprintHasChildren,
 	updateTaskAssignee,
-	removeTask
+	removeTask,
+	addExpandedSprint,
+	removeExpandedSprint
 } from '../../features/sprints/sprintsSlice'
 import {
 	selectFilteredSprints, 
 	selectSelectedSprint, 
 	selectSelectedTask,
-	selectFilteredTasks
+	selectFilteredTasks,
+	selectExpandedSprints
 } from '../../features/sprints/sprintsSelectors'
 
 // Utility function to strip formatting tags and return plain text
@@ -438,7 +441,9 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 	
 
 	
-	const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set())
+	// Use Redux state for expanded sprints
+	const expandedSprintsArray = useAppSelector(selectExpandedSprints) as string[]
+	const expandedSprints = new Set(expandedSprintsArray)
 	const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
 	
 	// Ref to store current expandedSprints for event handlers
@@ -462,6 +467,9 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 	const [deleteSprintDialogOpen, setDeleteSprintDialogOpen] = useState(false)
 	const [sprintToDelete, setSprintToDelete] = useState<Sprint | null>(null)
 	
+	// Track sprints that should show expand arrow even if hasChildren is not yet updated
+	const [forceShowExpandArrow, setForceShowExpandArrow] = useState<Set<string>>(new Set())
+	
 	// Pagination state - each sprint has its own pagination
 	const [paginationState, setPaginationState] = useState<Record<string, PaginationState>>({})
 	const [loadingTasks, setLoadingTasks] = useState<Set<string>>(new Set())
@@ -474,10 +482,23 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 		paginationStateRef.current = paginationState
 	}, [paginationState])
 	
-	// Keep the ref in sync with the state
+	// Keep the ref in sync with the Redux state
 	useEffect(() => {
 		expandedSprintsRef.current = expandedSprints
 	}, [expandedSprints])
+	
+	// Clean up forced expand arrow state when Redux state is properly updated
+	useEffect(() => {
+		setForceShowExpandArrow(prev => {
+			const newSet = new Set(prev)
+			sprints.forEach(sprint => {
+				if (sprint.hasChildren && newSet.has(sprint.id)) {
+					newSet.delete(sprint.id)
+				}
+			})
+			return newSet
+		})
+	}, [sprints])
 	
 
 	
@@ -622,7 +643,8 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 			// The useEffect will handle the actual restoration
 		}
 
-		const handleTaskRefresh = (data: { sprintId: string; taskId: string; action?: string; new_description?: string; new_assignee?: string; new_assignee_name?: string }) => {
+		const handleTaskRefresh = (data: { sprintId: string; taskId: string; action?: string; new_description?: string; new_assignee?: string; new_assignee_name?: string; task?: any }) => {
+			
 			// If only assignee changed, update selected task's assignee and exit
 			if (data.action === 'assignee_updated') {
 				if (selectedTask && selectedTask.id === data.taskId && data.new_assignee && data.new_assignee_name) {
@@ -635,24 +657,41 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 				return
 			}
 			
-			// For created actions, we need to handle sprint hasChildren updates even if sprint is not expanded
+			// For created actions, update sprint hasChildren
 			if (data.action === 'created') {
 				// Find the sprint in the props and check if it needs hasChildren update
 				const sprint = sprints.find(s => s.id === data.sprintId)
+				
 				if (sprint && !sprint.hasChildren) {
-					// Call the parent's callback to update the sprint's hasChildren property
 					dispatch(updateSprintHasChildren({ sprintId: data.sprintId, hasChildren: true }))
+					
+					// Force show expand arrow immediately
+					setForceShowExpandArrow(prev => new Set(prev).add(data.sprintId))
+					
+					// Automatically expand the sprint so the user can see the new task
+					if (!expandedSprintsRef.current.has(data.sprintId)) {
+						dispatch(addExpandedSprint(data.sprintId))
+						// Load the first page of tasks for the newly expanded sprint
+						loadSprintTasks(data.sprintId, 1, 5)
+					}
 				}
+				
+				// Since we don't have the task data in the refresh event, we need to request the sprint tasks
+				// to get the updated list with the new task
+				if (data.sprintId && expandedSprintsRef.current.has(data.sprintId)) {
+					const currentPagination = paginationStateRef.current[data.sprintId]
+					if (currentPagination) {
+						loadSprintTasks(data.sprintId, currentPagination.currentPage, currentPagination.pageSize)
+					} else {
+						loadSprintTasks(data.sprintId, 1, 5)
+					}
+				}
+				return
 			}
 			
-			// Refresh the specific task or sprint data only if the sprint is expanded
+			// For other actions, refresh if the sprint is expanded
 			if (data.sprintId && expandedSprintsRef.current.has(data.sprintId)) {
-
-				// Add delay for deleted actions to avoid race condition with database updates
-				// not a real issue in production. because server already has high latency
-				// but in local development, 2 socket calls are faster than 1 database query
-				// Also add a small delay for created actions to ensure database consistency
-				const delay = data.action === 'deleted' ? 250 : (data.action === 'created' ? 100 : 0)
+				const delay = data.action === 'deleted' ? 250 : 0
 				
 				setTimeout(() => {
 					const currentPagination = paginationStateRef.current[data.sprintId]
@@ -662,40 +701,15 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 						loadSprintTasks(data.sprintId, 1, 5)
 					}
 					
-					// For created tasks, we need to be more aggressive about refreshing
-					// to ensure all parent tasks get updated hasChildren values
-					if (data.action === 'created') {
-						
-						// Refresh all expanded tasks, not just their children
-						expandedTasks.forEach(expandedTaskId => {
-							const currentChildrenPagination = childrenPaginationStateRef.current[expandedTaskId]
-							if (currentChildrenPagination) {
-								loadTaskChildren(expandedTaskId, currentChildrenPagination.currentPage, currentChildrenPagination.pageSize)
-							} else {
-								loadTaskChildren(expandedTaskId, 1, 5)
-							}
-						})
-						
-						// Add extra delay to ensure database updates are complete
-						setTimeout(() => {
-							expandedTasks.forEach(expandedTaskId => {
-								const currentChildrenPagination = childrenPaginationStateRef.current[expandedTaskId]
-								if (currentChildrenPagination) {
-									loadTaskChildren(expandedTaskId, currentChildrenPagination.currentPage, currentChildrenPagination.pageSize)
-								}
-							})
-						}, 200)
-					} else {
-						// For non-created actions, use the original logic
-						expandedTasks.forEach(expandedTaskId => {
-							const currentChildrenPagination = childrenPaginationStateRef.current[expandedTaskId]
-							if (currentChildrenPagination) {
-								loadTaskChildren(expandedTaskId, currentChildrenPagination.currentPage, currentChildrenPagination.pageSize)
-							} else {
-								loadTaskChildren(expandedTaskId, 1, 5)
-							}
-						})
-					}
+					// Refresh expanded tasks
+					expandedTasks.forEach(expandedTaskId => {
+						const currentChildrenPagination = childrenPaginationStateRef.current[expandedTaskId]
+						if (currentChildrenPagination) {
+							loadTaskChildren(expandedTaskId, currentChildrenPagination.currentPage, currentChildrenPagination.pageSize)
+						} else {
+							loadTaskChildren(expandedTaskId, 1, 5)
+						}
+					})
 				}, delay)
 			}
 		}
@@ -860,16 +874,13 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 	}, [stableOnSprintTasksUpdate, sprints])
 
 	const handleSprintToggle = (sprintId: string) => {
-		const newExpanded = new Set(expandedSprints)
-		if (newExpanded.has(sprintId)) {
+		if (expandedSprints.has(sprintId)) {
 			// Collapsing - remove from expanded and reset state
-			newExpanded.delete(sprintId)
-			setExpandedSprints(newExpanded)
+			dispatch(removeExpandedSprint(sprintId))
 			resetSprintState(sprintId)
 		} else {
 			// Expanding - add to expanded and fetch tasks
-			newExpanded.add(sprintId)
-			setExpandedSprints(newExpanded)
+			dispatch(addExpandedSprint(sprintId))
 			
 			// Always load first page when expanding (fresh start)
 			loadSprintTasks(sprintId, 1, 5)
@@ -1059,8 +1070,8 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 
 					
 					
-					// Check if sprint has children based on server-provided hasChildren property
-					const hasChildren = sprint.hasChildren || false
+					// Check if sprint has children based on server-provided hasChildren property or forced state
+					const hasChildren = sprint.hasChildren || forceShowExpandArrow.has(sprint.id)
 					
 					return (
 						<Box key={sprint.id}>
@@ -1168,6 +1179,7 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 												</Box>
 											</Tooltip>
 										)}
+
 									</Box>
 								</ListItemButton>
 							</ListItem>
@@ -1297,13 +1309,22 @@ const SprintTreeView: React.FC<SprintTreeViewProps> = ({
 						</Box>
 					)
 				}) : (
-					<ListItem disablePadding>
-						<Box sx={{ py: 1 }}>
-							<Typography variant="caption" color="text.secondary">
-								No sprints available
-							</Typography>
-						</Box>
-					</ListItem>
+					<Box sx={{ 
+						display: 'flex', 
+						flexDirection: 'column', 
+						alignItems: 'center', 
+						justifyContent: 'center', 
+						minHeight: '200px',
+						textAlign: 'center',
+						py: 4
+					}}>
+						<Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+							Add Sprints to Start
+						</Typography>
+						<Typography variant="body2" color="text.secondary">
+							Create your first sprint to begin organizing your tasks
+						</Typography>
+					</Box>
 				)}
 			</List>
 

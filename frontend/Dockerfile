@@ -7,7 +7,9 @@ COPY . .
 RUN npm run build
 
 ARG VITE_API_URL
+ARG VITE_WS_URL
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
 
 # Production image with Nginx
 FROM nginx:stable-alpine

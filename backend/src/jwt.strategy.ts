@@ -29,12 +29,35 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         console.log('JWT Payload:', JSON.stringify(payload, null, 2));
         
         // Find user in database using auth0Id
-        const user = await this.prismaService.user.findUnique({
+        let user = await this.prismaService.user.findUnique({
             where: { auth0Id: payload.sub }
         });
         
         if (!user) {
-            throw new Error(`User with auth0Id ${payload.sub} not found in database`);
+            // User is authenticated via Auth0 but doesn't exist in our database
+            // Create a new user record
+            console.log(`Creating new user for auth0Id: ${payload.sub}`);
+            
+            // Generate a fallback name if not available from payload
+            let userName = payload.name || payload.email?.split('@')[0] || `User${Date.now()}`;
+            
+            // Ensure userName is a string
+            if (typeof userName !== 'string') {
+                userName = `User${Date.now()}`;
+            }
+            
+            try {
+                user = await this.prismaService.user.create({
+                    data: {
+                        auth0Id: payload.sub,
+                        name: userName
+                    }
+                });
+                console.log(`Created new user: ${user.name} (${user.id})`);
+            } catch (error) {
+                console.error('Failed to create user:', error);
+                throw new Error(`Failed to create user for auth0Id ${payload.sub}: ${error.message}`);
+            }
         }
         
         // Return user object that gets attached to req.user

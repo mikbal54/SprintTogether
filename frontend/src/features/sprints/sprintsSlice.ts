@@ -10,6 +10,7 @@ interface SprintsState {
   hideCompletedTasks: boolean
   loading: boolean
   error: string | null
+  expandedSprints: string[]
 }
 
 const initialState: SprintsState = {
@@ -19,7 +20,8 @@ const initialState: SprintsState = {
   hideCompletedSprints: false,
   hideCompletedTasks: false,
   loading: false,
-  error: null
+  error: null,
+  expandedSprints: []
 }
 
 const sprintsSlice = createSlice({
@@ -224,6 +226,21 @@ const sprintsSlice = createSlice({
       state.hideCompletedTasks = action.payload
     },
 
+    // Manage expanded sprints
+    setExpandedSprints: (state, action: PayloadAction<string[]>) => {
+      state.expandedSprints = action.payload
+    },
+
+    addExpandedSprint: (state, action: PayloadAction<string>) => {
+      if (!state.expandedSprints.includes(action.payload)) {
+        state.expandedSprints.push(action.payload)
+      }
+    },
+
+    removeExpandedSprint: (state, action: PayloadAction<string>) => {
+      state.expandedSprints = state.expandedSprints.filter(id => id !== action.payload)
+    },
+
     // Set loading state
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.loading = action.payload
@@ -258,6 +275,9 @@ export const {
   removeTask,
   setHideCompletedSprints,
   setHideCompletedTasks,
+  setExpandedSprints,
+  addExpandedSprint,
+  removeExpandedSprint,
   setLoading,
   setError,
   clearSelections

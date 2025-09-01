@@ -251,6 +251,8 @@ export default function DashboardPage() {
 	
 
 	
+
+	
 	// UI state from Redux
 	const isCreateOpen = useAppSelector(selectIsCreateOpen) as boolean
 	const isChangeAssigneeOpen = useAppSelector(selectIsChangeAssigneeOpen) as boolean
@@ -378,11 +380,15 @@ export default function DashboardPage() {
 		}
 	}, [showColorPicker, showSizeSelector, dispatch])
 	
-	const { sub, unsub, emit } = useWebSocket()
+	const { sub, unsub, emit, isConnected } = useWebSocket()
 	
 
 
 	useEffect(() => {
+		// Only subscribe to events when WebSocket is connected
+		if (!isConnected) {
+			return;
+		}
 		
 		// Subscribe to WebSocket events using the context
 		const handleSprintGetAll = (data: any) => {
@@ -400,7 +406,11 @@ export default function DashboardPage() {
 				sprintsArray = []
 			}
 			
-			dispatch(setSprints(sprintsArray))
+			// Only update if we have sprints or if we're replacing existing sprints
+			// This prevents clearing sprints when server sends empty data
+			if (sprintsArray.length > 0 || sprints.length === 0) {
+				dispatch(setSprints(sprintsArray))
+			}
 		}
 
 		const handleTaskSetStatus = (data: { event: string; id: string; result: any }) => {
@@ -453,6 +463,7 @@ export default function DashboardPage() {
 						...selectedTask, 
 						hasChildren: true
 					} as Task : null
+					
 					dispatch(setSelectedTask(updatedTask))
 				} else {
 					// For other actions, find the updated task in the sprints data
@@ -461,7 +472,7 @@ export default function DashboardPage() {
 						.find(task => task.id === data.taskId)
 					
 					if (updatedTask) {
-											dispatch(setSelectedTask(updatedTask))
+						dispatch(setSelectedTask(updatedTask))
 					}
 				}
 			}
@@ -483,19 +494,22 @@ export default function DashboardPage() {
 			
 			// Update the task in the sprints list for created actions
 			if (data.action === 'created') {
-				const updatedSprints = (sprints as Sprint[]).map(sprint => ({
+				const updatedSprints = sprints.map(sprint => ({
 					...sprint,
 					tasks: sprint.tasks?.map(task => 
 						task.id === data.taskId ? { ...task, hasChildren: true } : task
 					)
 				}))
+				
 				dispatch(setSprints(updatedSprints))
+				
+				// SprintTreeView will handle adding the task to the expanded sprint directly
+				// No need to make additional API calls
 			}
 		}
 
 		// Add handler for sprint:refresh events
 		const handleSprintRefresh = (data: { sprintId: string; action?: string; new_description?: string; new_name?: string }) => {
-			
 			// If the refreshed sprint is currently selected, update it
 			if (selectedSprint && selectedSprint.id === data.sprintId) {
 							if (data.action === 'description_updated' && data.new_description) {
@@ -624,7 +638,7 @@ export default function DashboardPage() {
 			unsub('task:description_updated', handleTaskDescriptionUpdate)
 			unsub('task.deleted', handleTaskDeleted)
 		}
-	}, [sub, unsub, dispatch])
+	}, [sub, unsub, dispatch, isConnected, sprints, selectedSprint, selectedTask])
 
 	// Start JWT refresh cycle when component mounts
 	useEffect(() => {
@@ -781,51 +795,85 @@ export default function DashboardPage() {
 							<OnlineUsersDisplay />
 				<OnlineUsersWebSocketHandler />
 			
-			<Box sx={{ display: 'flex', gap: 3, minHeight: 'calc(100vh - 120px)', alignItems: 'flex-start' }}>
-				<Paper sx={{ 
-					p: 2, 
-					display: 'flex',
-					flexDirection: 'column',
-					flexShrink: 0, // Prevent shrinking
-					minWidth: '300px',
-					maxWidth: '60vw' // Match the tree's max width
+			{sprints.length === 0 ? (
+				<Box sx={{ 
+					display: 'flex', 
+					flexDirection: 'column', 
+					alignItems: 'center', 
+					justifyContent: 'center', 
+					minHeight: 'calc(100vh - 120px)',
+					textAlign: 'center',
+					py: 4
 				}}>
-					<Typography variant="h6" gutterBottom>
-						Sprints
+					<Typography 
+						variant="h2" 
+						sx={{ 
+							fontSize: '4rem',
+							fontWeight: 300,
+							color: 'text.secondary',
+							opacity: 0.5,
+							mb: 2
+						}}
+					>
+						Add Sprints to Start
 					</Typography>
-					
-					{/* Filter Controls */}
-					<Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-							<input
-								type="checkbox"
-								id="hideCompletedSprints"
-								checked={hideCompletedSprints}
-								onChange={(e) => dispatch(setHideCompletedSprints(e.target.checked))}
-							/>
-							<label htmlFor="hideCompletedSprints">
-								<Typography variant="body2">Hide completed sprints</Typography>
-							</label>
+					<Typography 
+						variant="h6" 
+						sx={{ 
+							color: 'text.secondary',
+							opacity: 0.7,
+							fontWeight: 400
+						}}
+					>
+						Create your first sprint to begin organizing your tasks
+					</Typography>
+				</Box>
+			) : (
+				<Box sx={{ display: 'flex', gap: 3, minHeight: 'calc(100vh - 120px)', alignItems: 'flex-start' }}>
+					<Paper sx={{ 
+						p: 2, 
+						display: 'flex',
+						flexDirection: 'column',
+						flexShrink: 0, // Prevent shrinking
+						minWidth: '300px',
+						maxWidth: '60vw' // Match the tree's max width
+					}}>
+						<Typography variant="h6" gutterBottom>
+							Sprints
+						</Typography>
+						
+						{/* Filter Controls */}
+						<Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+								<input
+									type="checkbox"
+									id="hideCompletedSprints"
+									checked={hideCompletedSprints}
+									onChange={(e) => dispatch(setHideCompletedSprints(e.target.checked))}
+								/>
+								<label htmlFor="hideCompletedSprints">
+									<Typography variant="body2">Hide completed sprints</Typography>
+								</label>
+							</Box>
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+								<input
+									type="checkbox"
+									id="hideCompletedTasks"
+									checked={hideCompletedTasks}
+									onChange={(e) => dispatch(setHideCompletedTasks(e.target.checked))}
+								/>
+								<label htmlFor="hideCompletedTasks">
+									<Typography variant="body2">Hide completed tasks</Typography>
+								</label>
+							</Box>
 						</Box>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-							<input
-								type="checkbox"
-								id="hideCompletedTasks"
-								checked={hideCompletedTasks}
-								onChange={(e) => dispatch(setHideCompletedTasks(e.target.checked))}
-							/>
-							<label htmlFor="hideCompletedTasks">
-								<Typography variant="body2">Hide completed tasks</Typography>
-							</label>
-						</Box>
-					</Box>
+						
+						<SprintTreeView
+							onAddTask={handleAddTask}
+						/>
+					</Paper>
 					
-					<SprintTreeView
-						onAddTask={handleAddTask}
-					/>
-				</Paper>
-				
-				{(selectedSprint || selectedTask) ? (
+					{(selectedSprint || selectedTask) ? (
 					<Paper sx={{ 
 						p: 2, 
 						flex: 1, // Take remaining space 
@@ -1360,9 +1408,10 @@ export default function DashboardPage() {
 							</Box>
 						</Box>
 					)}
-				</Paper>
-				) : null}
-			</Box>
+					</Paper>
+					) : null}
+				</Box>
+			)}
 			
 			<TaskCreationModal 
 				open={isCreateOpen} 

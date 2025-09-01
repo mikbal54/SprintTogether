@@ -2,11 +2,15 @@ import { Controller, Get, Post, Req, Redirect, UseGuards, Res, Body, Unauthorize
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { ConfigService } from './config.service';
 import type { Response, Request } from 'express'
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService,) {}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly configService: ConfigService,
+    ) {}
 
 	// Route to redirect user to Auth0 login page
 	@Get('login')
@@ -46,7 +50,7 @@ export class AuthController {
 		});
 
 		// 2) Redirect to Auth0 logout (which will redirect back to your SPA)
-		const returnTo = encodeURIComponent('http://localhost:5173/');
+		const returnTo = encodeURIComponent(this.configService.getFrontendUrl() + '/');
 		const clientId = process.env.AUTH0_CLIENT_ID!;
 		const domain = process.env.AUTH0_DOMAIN!; // e.g. my-tenant.eu.auth0.com
 		const url = `https://${domain}/v2/logout?client_id=${clientId}&returnTo=${returnTo}`;
@@ -84,7 +88,7 @@ export class AuthController {
 		});
 		
 		// Redirect browser to React dashboard
-		res.redirect('http://localhost:5173/');
+		res.redirect(this.configService.getFrontendUrl() + '/');
 	}
 
 	@Get('me')

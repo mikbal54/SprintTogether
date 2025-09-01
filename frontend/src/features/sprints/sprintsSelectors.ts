@@ -10,6 +10,7 @@ export const selectHideCompletedSprints = (state: RootState): boolean => state.s
 export const selectHideCompletedTasks = (state: RootState): boolean => state.sprints.hideCompletedTasks
 export const selectSprintsLoading = (state: RootState): boolean => state.sprints.loading
 export const selectSprintsError = (state: RootState): string | null => state.sprints.error
+export const selectExpandedSprints = (state: RootState): string[] => state.sprints.expandedSprints
 
 // Computed selectors
 export const selectFilteredSprints = createSelector(
